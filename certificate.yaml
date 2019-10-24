@@ -1,0 +1,10 @@
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: vpa-webhook
+  namespace: cluster-addons
+spec:
+  commonName: vpa-webhook.cluster-addons.svc
+  secretName: vpa-webhook-certificate
+  issuerRef:
+    name: vpa-webhook
