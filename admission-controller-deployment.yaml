@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vpa-admission-controller
-  namespace: kube-system
+  namespace: cluster-addons
 spec:
   replicas: 1
   selector:
@@ -24,9 +24,16 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+          args:
+            - --client-ca-file
+            - /cert/ca.crt
+            - --tls-cert-file
+            - /cert/tls.crt
+            - --tls-private-key
+            - /cert/tls.key
           volumeMounts:
-            - name: tls-certs
-              mountPath: "/etc/tls-certs"
+            - name: cert
+              mountPath: "/cert"
               readOnly: true
           resources:
             limits:
@@ -38,15 +45,15 @@ spec:
           ports:
             - containerPort: 8000
       volumes:
-        - name: tls-certs
+        - name: cert
           secret:
-            secretName: vpa-tls-certs
+            secretName: vpa-webhook-cert
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: vpa-webhook
-  namespace: kube-system
+  namespace: cluster-addons
 spec:
   ports:
     - port: 443

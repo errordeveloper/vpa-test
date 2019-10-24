@@ -5,6 +5,6 @@ metadata:
   namespace: cluster-addons
 spec:
   commonName: vpa-webhook.cluster-addons.svc
-  secretName: vpa-webhook-certificate
+  secretName: vpa-webhook-cert
   issuerRef:
     name: vpa-webhook
