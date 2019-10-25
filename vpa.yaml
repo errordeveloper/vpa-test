@@ -1,4 +1,71 @@
 ---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: verticalpodautoscalers.autoscaling.k8s.io
+spec:
+  group: autoscaling.k8s.io
+  scope: Namespaced
+  names:
+    plural: verticalpodautoscalers
+    singular: verticalpodautoscaler
+    kind: VerticalPodAutoscaler
+    shortNames:
+      - vpa
+  version: v1beta1
+  versions:
+    - name: v1beta1
+      served: true
+      storage: false
+    - name: v1beta2
+      served: true
+      storage: true
+  validation:
+    # openAPIV3Schema is the schema for validating custom objects.
+    openAPIV3Schema:
+      properties:
+        spec:
+          type: object
+          required: []
+          properties:
+            targetRef:
+              type: object
+            updatePolicy:
+              type: object
+              properties:
+                updateMode:
+                  type: string
+            resourcePolicy:
+              type: object
+              properties:
+                containerPolicies:
+                  type: array
+                  items:
+                    type: object
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: verticalpodautoscalercheckpoints.autoscaling.k8s.io
+spec:
+  group: autoscaling.k8s.io
+  scope: Namespaced
+  names:
+    plural: verticalpodautoscalercheckpoints
+    singular: verticalpodautoscalercheckpoint
+    kind: VerticalPodAutoscalerCheckpoint
+    shortNames:
+      - vpacheckpoint
+  version: v1beta1
+  versions:
+    - name: v1beta1
+      served: true
+      storage: false
+    - name: v1beta2
+      served: true
+      storage: true
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -276,3 +343,142 @@ subjects:
   - kind: ServiceAccount
     name: vpa-admission-controller
     namespace: cluster-addons
+
+---
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vpa-recommender
+  namespace: cluster-addons
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpa-recommender
+  namespace: cluster-addons
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpa-recommender
+  template:
+    metadata:
+      labels:
+        app: vpa-recommender
+    spec:
+      serviceAccountName: vpa-recommender
+      containers:
+      - name: recommender
+        image: k8s.gcr.io/vpa-recommender:0.6.3
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: 200m
+            memory: 1000Mi
+          requests:
+            cpu: 50m
+            memory: 500Mi
+        ports:
+        - containerPort: 8080
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vpa-updater
+  namespace: cluster-addons
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpa-updater
+  namespace: cluster-addons
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpa-updater
+  template:
+    metadata:
+      labels:
+        app: vpa-updater
+    spec:
+      serviceAccountName: vpa-updater
+      containers:
+        - name: updater
+          image: k8s.gcr.io/vpa-updater:0.6.3
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 200m
+              memory: 1000Mi
+            requests:
+              cpu: 50m
+              memory: 500Mi
+          ports:
+            - containerPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpa-admission-controller
+  namespace: cluster-addons
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpa-admission-controller
+  template:
+    metadata:
+      labels:
+        app: vpa-admission-controller
+    spec:
+      serviceAccountName: vpa-admission-controller
+      containers:
+        - name: admission-controller
+          image: k8s.gcr.io/vpa-admission-controller:0.6.3
+          imagePullPolicy: Always
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          args:
+            - --client-ca-file
+            - /cert/ca.crt
+            - --tls-cert-file
+            - /cert/tls.crt
+            - --tls-private-key
+            - /cert/tls.key
+          volumeMounts:
+            - name: cert
+              mountPath: "/cert"
+              readOnly: true
+          resources:
+            limits:
+              cpu: 200m
+              memory: 500Mi
+            requests:
+              cpu: 50m
+              memory: 200Mi
+          ports:
+            - containerPort: 8000
+      volumes:
+        - name: cert
+          secret:
+            secretName: vpa-webhook-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vpa-webhook
+  namespace: cluster-addons
+spec:
+  ports:
+    - port: 443
+      targetPort: 8000
+  selector:
+    app: vpa-admission-controller
+
